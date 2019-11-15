@@ -196,7 +196,81 @@ abline(h = min(test.err), col = "red")
 
 1. Attempt a regression tree-based method (not covered in this tutorial) on a reasonable dataset of your choice. Explain the results. 
 
+```{r}
+data <- airquality%>%
+  na.omit
+
+## set the seed to make your partition reproducible
+
+set.seed(123)
+
+sampsize <- floor(0.75*nrow(data))
+train <- sample(seq_len(nrow(data)), size = sampsize)
+training <- data[train,]
+testing <- data[-train, ]
+
+tree.model <- tree(Temp~.,training)
+
+plot(tree.model)
+text(tree.model, cex=.75, pretty = 0)
+```
+
+```{r}
+tree.pred <- predict(tree.model, testing)
+table(tree.pred)
+plot(tree.pred)
+text(tree.pred, cex=.75)
+```
+
+For predicting the Temperature based off the remaining features, the most important feature in creating this model is the Ozone. When testing this tree on the testing data, 
+
+
 2. Attempt both a bagging and boosting method on a reasonable dataset of your choice. Explain the results.
 
+```{r Bagging}
+data("abalone")
+abalone <- abalone
+
+set.seed(123)
+train2 = sample(1:nrow(abalone), 2000)
+
+forest <- randomForest(Rings~., data= abalone, subset = train2)
 
 
+oob.err2 = double(13)
+test.err2 = double(13)
+for(mtry in 1:13){
+  fit = randomForest(Rings~., data = abalone, subset=train2, mtry=mtry, ntree = 350)
+  oob.err2[mtry] = fit$mse[350] 
+  pred = predict(fit, abalone[-train2,]) 
+  test.err2[mtry] = with(abalone[-train2,], mean( (Rings-pred)^2 ))
+}
+
+matplot(1:mtry, cbind(test.err2, oob.err2), pch = 23, col = c("red", "blue"), type = "b", ylab="Mean Squared Error")
+legend("topright", legend = c("OOB", "Test"), pch = 23, col = c("red", "blue"))
+```
+
+After trying the Bagging method, the model on the training data has an overall lower mean Square Error than the testing data. The model, in both situations however, starts on a downward trend however performs worse after about 5 permutations of the data. This however, does restart its downward trend after the 9th permutation but seems to continue an upward trend after 13. 
+
+```{r Boosting}
+boost.ab = gbm(Rings~., data = abalone[train2,], distribution = "gaussian", n.trees = 10000, shrinkage = 0.01, interaction.depth = 4)
+
+#Variable Importance Plot
+summary(boost.ab)
+
+#Visualize important variables of interest
+plot(boost.ab,i="Diameter")
+plot(boost.ab,i="Height")
+
+#Predict on test set
+ntrees = seq(from = 100, to = 10000, by = 100)
+pred = predict(boost.ab, newdata = abalone[-train2,], n.trees = ntrees)
+dim(pred)
+
+#Visualize Boosting Error Plot
+boost.err2 = with(abalone[-train2,], apply( (pred - Rings)^2, 2, mean) )
+plot(ntrees, boost.err2, pch = 23, ylab = "Mean Squared Error", xlab = "# Trees", main = "Boosting Test Error")
+abline(h = min(test.err2), col = "red")
+
+```
+After boosting, the model shows that after 2000 trees the mean squared error of the model increases stadily, depicting that the model performs worse after being ran 2000 times. 
